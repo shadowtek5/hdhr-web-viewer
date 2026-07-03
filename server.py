@@ -28,7 +28,7 @@ import uuid
 import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-APP_VERSION = "1.3"
+APP_VERSION = "1.4"
 UPDATE_REPO = "shadowtek5/hdhr-web-viewer"  # Docker Hub repo checked for newer tags
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -224,6 +224,77 @@ def version_info():
     newer = bool(latest and cur and parse_version(latest) > cur)
     return {"version": APP_VERSION, "latest": latest,
             "updateAvailable": newer, "repo": UPDATE_REPO}
+
+
+# ---------------------------------------------------------------------------
+# Dashboard stats (for gethomepage.dev customapi widgets and similar).
+# Flat JSON, cheap to poll: cached 10s, lineup size cached 10 min.
+# ---------------------------------------------------------------------------
+
+_stats_lock = threading.Lock()
+_stats_cache = {}         # ip-or-'' -> (ts, data)
+_lineup_count_cache = {}  # ip -> (ts, count)
+
+
+def _lineup_count(ip):
+    cached = _lineup_count_cache.get(ip)
+    if cached and time.time() - cached[0] < 600:
+        return cached[1]
+    count = None
+    try:
+        count = len(http_get_json(f"http://{ip}/lineup.json", timeout=4))
+    except Exception:
+        pass
+    _lineup_count_cache[ip] = (time.time(), count)
+    return count
+
+
+def collect_stats(ip=None):
+    key = ip or ""
+    with _stats_lock:
+        cached = _stats_cache.get(key)
+        if cached and time.time() - cached[0] < 10:
+            return cached[1]
+
+    with sessions_lock:
+        active = sum(1 for s in sessions.values() if s["proc"].poll() is None)
+
+    data = {
+        "version": APP_VERSION,
+        "updateAvailable": version_info()["updateAvailable"],
+        "activeStreams": active,
+        "tunerCount": None, "tunersInUse": None, "tunersFree": None,
+        "channels": None, "device": None,
+    }
+    target = ip
+    if not target:
+        saved = load_saved_ips()
+        target = saved[0] if saved else None
+    if target:
+        try:
+            status = http_get_json(f"http://{target}/status.json", timeout=3)
+            in_use = sum(1 for t in status if t.get("VctNumber") or t.get("Frequency"))
+            data["tunersInUse"] = in_use
+            data["tunerCount"] = len(status)
+            data["tunersFree"] = len(status) - in_use
+        except Exception:
+            pass
+        try:
+            info = fetch_device_info(target)
+            data["device"] = info.get("FriendlyName") or info.get("ModelNumber")
+            if info.get("TunerCount"):
+                data["tunerCount"] = info["TunerCount"]
+                if data["tunersInUse"] is not None:
+                    data["tunersFree"] = info["TunerCount"] - data["tunersInUse"]
+        except Exception:
+            pass
+        data["channels"] = _lineup_count(target)
+
+    with _stats_lock:
+        _stats_cache[key] = (time.time(), data)
+        if len(_stats_cache) > 8:
+            _stats_cache.pop(min(_stats_cache, key=lambda k: _stats_cache[k][0]))
+    return data
 
 
 # ---------------------------------------------------------------------------
@@ -582,6 +653,11 @@ class Handler(BaseHTTPRequestHandler):
                 self.api_device_proxy(query, "/status.json")
             elif path == "/api/version":
                 self.send_json(version_info())
+            elif path == "/api/stats":
+                ip = query.get("device", [None])[0]
+                if ip and not valid_ip(ip):
+                    return self.send_json({"error": "Invalid device parameter."}, 400)
+                self.send_json(collect_stats(ip))
             elif path == "/api/signal/status":
                 ip = query.get("device", [None])[0]
                 if not ip or not valid_ip(ip):

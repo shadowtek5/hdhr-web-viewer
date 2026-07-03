@@ -61,6 +61,44 @@ docker run -d --name hdhr-viewer --network host \
   shadowtek5/hdhr-web-viewer:latest
 ```
 
+### Homepage dashboard widget
+
+If you run [Homepage](https://github.com/gethomepage/homepage), the app exposes
+`/api/stats` — flat JSON made for the `customapi` widget. Add to `services.yaml`:
+
+```yaml
+- Media:
+    - HDHomeRun Viewer:
+        icon: mdi-television-classic
+        href: http://<host-ip>:8090
+        description: Live TV
+        widget:
+          type: customapi
+          url: http://<host-ip>:8090/api/stats
+          refreshInterval: 10000
+          mappings:
+            - field: activeStreams
+              label: Streaming
+              format: number
+            - field: tunersFree
+              label: Tuners free
+              format: number
+            - field: channels
+              label: Channels
+              format: number
+            - field: version
+              label: Version
+```
+
+`/api/stats` also reports `tunersInUse`, `tunerCount`, `device`, and
+`updateAvailable` — pick any four mappings you like. It uses the first saved
+tuner by default; add `?device=<tuner-ip>` to the URL to target another.
+
+Homepage also ships a built-in `hdhomerun` widget that talks to the tuner
+directly (`type: hdhomerun`, `url: http://<tuner-ip>`) — that one shows the
+tuner's own channel totals and works even when this app is stopped. Both look
+great side by side.
+
 ### Versions & updates
 
 The app knows its own version (`APP_VERSION` in `server.py`) and checks Docker
