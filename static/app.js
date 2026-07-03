@@ -712,21 +712,51 @@
 
   // -- Background muzak (Web Audio; drop static/music.mp3 in to override) ------
 
-  const muzak = { ctx: null, gain: null, timer: null, step: 0, audio: null, mode: null, custom: null };
+  const muzak = { ctx: null, out: null, timer: null, bar: 0, nextBar: 0,
+                  noise: null, audio: null, mode: null, custom: null };
 
-  function muzakNote(freq, t, dur, vol, type) {
+  function mzTone(freq, t, dur, vol, type, opts) {
+    opts = opts || {};
     const o = muzak.ctx.createOscillator();
-    o.type = type;
-    o.frequency.value = freq;
+    o.type = type || "sine";
+    o.frequency.setValueAtTime(freq, t);
+    if (opts.bend) o.frequency.exponentialRampToValueAtTime(freq * opts.bend, t + dur);
     const g = muzak.ctx.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(vol, t + 0.05);
+    g.gain.exponentialRampToValueAtTime(vol, t + (opts.att || 0.02));
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     o.connect(g);
-    g.connect(muzak.gain);
+    if (opts.lp) {
+      const f = muzak.ctx.createBiquadFilter();
+      f.type = "lowpass";
+      f.frequency.value = opts.lp;
+      g.connect(f);
+      f.connect(muzak.out);
+    } else {
+      g.connect(muzak.out);
+    }
     o.start(t);
     o.stop(t + dur + 0.1);
   }
+
+  function mzNoise(t, dur, vol, freq) {
+    const src = muzak.ctx.createBufferSource();
+    src.buffer = muzak.noise;
+    src.playbackRate.value = 0.9 + Math.random() * 0.2;
+    const f = muzak.ctx.createBiquadFilter();
+    f.type = "highpass";
+    f.frequency.value = freq;
+    const g = muzak.ctx.createGain();
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f); f.connect(g); g.connect(muzak.out);
+    src.start(t);
+    src.stop(t + dur + 0.05);
+  }
+
+  const mzKick = (t) => mzTone(115, t, 0.22, 0.55, "sine", { bend: 0.4, att: 0.005 });
+  const mzSnare = (t) => { mzNoise(t, 0.16, 0.26, 1700); mzTone(195, t, 0.09, 0.12, "triangle", { att: 0.005 }); };
+  const mzHat = (t, open) => mzNoise(t, open ? 0.28 : 0.05, open ? 0.1 : 0.085, 6800);
 
   async function muzakStart() {
     if (muzak.mode) return true;
@@ -746,36 +776,78 @@
     muzak.ctx = new AC();
     try { await muzak.ctx.resume(); } catch (e) {}
     if (muzak.ctx.state !== "running") { muzak.ctx.close(); muzak.ctx = null; return false; }
-    muzak.gain = muzak.ctx.createGain();
-    muzak.gain.gain.value = 0.42;
-    muzak.gain.connect(muzak.ctx.destination);
 
+    // master -> compressor -> speakers, so it can run hot without clipping
+    const comp = muzak.ctx.createDynamicsCompressor();
+    comp.threshold.value = -20; comp.knee.value = 12; comp.ratio.value = 5;
+    comp.attack.value = 0.004; comp.release.value = 0.18;
+    comp.connect(muzak.ctx.destination);
+    muzak.out = muzak.ctx.createGain();
+    muzak.out.gain.value = 0.6;
+    muzak.out.connect(comp);
+
+    muzak.noise = muzak.ctx.createBuffer(1, muzak.ctx.sampleRate, muzak.ctx.sampleRate);
+    const nd = muzak.noise.getChannelData(0);
+    for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+
+    // ---- Local-on-the-8s smooth jazz: 112 BPM swung groove ----
     const N = (n) => 440 * Math.pow(2, (n - 69) / 12);
-    const MAJ7 = [0, 4, 7, 11], MIN7 = [0, 3, 7, 10], DOM7 = [0, 4, 7, 10];
-    const CHORDS = [ // a gentle ii-V-I stroll in C — pure elevator
-      { root: 48, iv: MAJ7 }, { root: 45, iv: MIN7 }, { root: 50, iv: MIN7 }, { root: 43, iv: DOM7 },
-      { root: 48, iv: MAJ7 }, { root: 41, iv: MAJ7 }, { root: 50, iv: MIN7 }, { root: 43, iv: DOM7 },
+    const BEAT = 60 / 112, BAR = BEAT * 4, SW = 0.58;
+    const e8 = (i) => BEAT * (Math.floor(i / 2) + (i % 2) * SW); // swung eighths
+    const MAJ9 = [0, 4, 7, 11, 14], MIN9 = [0, 3, 7, 10, 14], DOM9 = [0, 4, 7, 10, 13];
+    const PROG = [
+      { root: 48, iv: MAJ9 }, { root: 45, iv: MIN9 }, { root: 50, iv: MIN9 }, { root: 43, iv: DOM9 },
+      { root: 52, iv: MIN9 }, { root: 45, iv: DOM9 }, { root: 50, iv: MIN9 }, { root: 43, iv: DOM9 },
     ];
-    const PENTA = [0, 2, 4, 7, 9];
-    const chordDur = 3.2;
-    const playChord = () => {
-      if (!muzak.ctx) return;
-      const t = muzak.ctx.currentTime + 0.05;
-      const c = CHORDS[muzak.step % CHORDS.length];
-      muzak.step += 1;
-      for (const off of c.iv) muzakNote(N(c.root + 12 + off), t, chordDur * 0.95, 0.05, "triangle");
-      muzakNote(N(c.root - 12), t, 1.5, 0.11, "sine");                          // bass on 1
-      muzakNote(N(c.root - 12 + c.iv[2]), t + chordDur / 2, 1.3, 0.08, "sine"); // fifth on 3
-      let mt = t + 0.5;
-      for (let k = 0; k < 3; k++) { // wandering soft lead
-        if (Math.random() < 0.65) {
-          muzakNote(N(c.root + 24 + PENTA[Math.floor(Math.random() * PENTA.length)]), mt, 1.0, 0.035, "sine");
+    const PENTA = [0, 2, 4, 7, 9, 12, 14];
+
+    const scheduleBar = (t0) => {
+      const c = PROG[muzak.bar % PROG.length];
+      // drums: swung hats, kick on 1 + and-of-3, snare on 2 and 4
+      for (let i = 0; i < 8; i++) mzHat(t0 + e8(i), false);
+      if (muzak.bar % 2 === 1) mzHat(t0 + e8(7), true);
+      mzKick(t0);
+      mzKick(t0 + e8(5));
+      mzSnare(t0 + BEAT);
+      mzSnare(t0 + BEAT * 3);
+      // funky bass: root, fifth, octave, walk
+      const b = c.root - 12;
+      mzTone(N(b), t0, 0.4, 0.34, "triangle", { att: 0.008 });
+      mzTone(N(b + 7), t0 + e8(3), 0.28, 0.24, "triangle", { att: 0.008 });
+      mzTone(N(b + 12), t0 + e8(5), 0.28, 0.26, "triangle", { att: 0.008 });
+      mzTone(N(b + (muzak.bar % 2 ? 5 : 7)), t0 + e8(6), 0.32, 0.22, "triangle", { att: 0.008 });
+      // Rhodes stabs (9th voicings) comping on the offbeats
+      for (const st of [e8(3), BEAT * 3]) {
+        for (const off of c.iv) {
+          mzTone(N(c.root + 12 + off), t0 + st, 0.6, 0.07, "triangle", { att: 0.01 });
+          mzTone(N(c.root + 24 + off), t0 + st, 0.5, 0.028, "sine", { att: 0.01 });
         }
-        mt += chordDur / 3.5;
+      }
+      // sax-ish lead phrase every other bar
+      if (muzak.bar % 2 === 0) {
+        let pos = Math.floor(Math.random() * 2);
+        const notes = 3 + Math.floor(Math.random() * 3);
+        for (let k = 0; k < notes && pos < 8; k++) {
+          const deg = PENTA[Math.floor(Math.random() * PENTA.length)];
+          mzTone(N(c.root + 24 + deg), t0 + e8(pos), 0.5 + Math.random() * 0.5, 0.11, "sawtooth",
+                 { lp: 1500, att: 0.03, bend: Math.random() < 0.3 ? 1.02 : 1 });
+          pos += 1 + Math.floor(Math.random() * 2);
+        }
+      }
+      muzak.bar += 1;
+    };
+
+    // lookahead scheduler keeps the groove drift-free
+    muzak.nextBar = muzak.ctx.currentTime + 0.1;
+    const pump = () => {
+      if (!muzak.ctx) return;
+      while (muzak.nextBar < muzak.ctx.currentTime + 0.6) {
+        scheduleBar(muzak.nextBar);
+        muzak.nextBar += BAR;
       }
     };
-    playChord();
-    muzak.timer = setInterval(playChord, chordDur * 1000);
+    pump();
+    muzak.timer = setInterval(pump, 150);
     muzak.mode = "synth";
     return true;
   }
@@ -785,6 +857,7 @@
     if (muzak.audio && muzak.mode === "file") muzak.audio.pause();
     if (muzak.ctx) { try { muzak.ctx.close(); } catch (e) {} muzak.ctx = null; }
     muzak.mode = null;
+    muzak.bar = 0;
   }
 
   function updateMusicBtn() {
