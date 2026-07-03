@@ -683,29 +683,55 @@ video { flex: 1; width: 100%; min-height: 0; background: #000; }
 }
 #classicExit:hover { background: rgba(40, 40, 140, 0.8); }
 
-/* -- CRT mode: snow, heavy scanlines, flicker, vignette -- */
+/* -- CRT mode: weather.com/retro-style — fine interlace lines, rolling hum
+   bar, RGB fringing, bloom, curvature vignette, whisper of grain -- */
 
-#crtNoise, #crtVignette { display: none; position: absolute; inset: 0; pointer-events: none; }
-#crtNoise { width: 100%; height: 100%; z-index: 6; image-rendering: pixelated; }
+#crtNoise, #crtHum, #crtVignette { display: none; position: absolute; inset: 0; pointer-events: none; }
+#crtNoise { width: 100%; height: 100%; z-index: 6; image-rendering: pixelated; opacity: 0.5; }
+#crtHum {
+  z-index: 6;
+  background: linear-gradient(180deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.015) 35%,
+    rgba(255, 255, 255, 0.07) 50%,
+    rgba(255, 255, 255, 0.015) 65%,
+    transparent 100%);
+  background-size: 100% 45%;
+  background-repeat: no-repeat;
+  animation: crtHumRoll 9s linear infinite;
+}
+@keyframes crtHumRoll {
+  from { background-position: 0 -60%; }
+  to { background-position: 0 160%; }
+}
 #crtVignette {
   z-index: 7;
-  background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 20, 0.55) 100%);
+  background:
+    radial-gradient(ellipse 130% 130% at center, transparent 60%, rgba(0, 0, 15, 0.42) 96%),
+    linear-gradient(90deg, rgba(0, 0, 15, 0.3) 0%, transparent 4%, transparent 96%, rgba(0, 0, 15, 0.3) 100%),
+    linear-gradient(180deg, rgba(0, 0, 15, 0.3) 0%, transparent 3%, transparent 97%, rgba(0, 0, 15, 0.3) 100%);
 }
-.crt-on #crtNoise, .crt-on #crtVignette { display: block; }
+.crt-on #crtNoise, .crt-on #crtHum, .crt-on #crtVignette { display: block; }
 .crt-on::after {
-  background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.32) 0 2px, transparent 2px 4px);
+  background: repeating-linear-gradient(0deg, rgba(0, 0, 10, 0.28) 0 1px, transparent 1px 3px);
 }
 .crt-on #classicTop, .crt-on #classicHead, .crt-on #classicScroll {
-  filter: blur(0.4px) saturate(1.25) contrast(1.06);
-  animation: crtFlicker 4s steps(1) infinite;
+  filter: blur(0.35px) saturate(1.35) brightness(1.05) contrast(1.04);
+  animation: crtFlicker 7s steps(1) infinite;
 }
+/* chromatic aberration: red/cyan ghosts on the bright text */
+.crt-on .cl-title, .crt-on .cl-num, .crt-on #ciTitle, .crt-on #ciChannel,
+.crt-on #classicClock, .crt-on .cb-line2, .crt-on #classicHead {
+  text-shadow: -1.4px 0 rgba(255, 70, 70, 0.55), 1.4px 0 rgba(70, 240, 255, 0.5), 2px 2px 0 #000040;
+}
+.crt-on #classicVideo { filter: saturate(1.3) contrast(1.05) blur(0.5px); }
 @keyframes crtFlicker {
   0%, 100% { opacity: 1; }
-  93% { opacity: 1; }
-  93.5% { opacity: 0.92; }
   94% { opacity: 1; }
-  97% { opacity: 0.96; }
-  97.4% { opacity: 1; }
+  94.4% { opacity: 0.95; }
+  94.8% { opacity: 1; }
+  98% { opacity: 0.975; }
+  98.3% { opacity: 1; }
 }
 
 #classicHead {

@@ -737,7 +737,7 @@
     if (muzak.custom) {
       muzak.audio = muzak.audio || new Audio("/static/music.mp3");
       muzak.audio.loop = true;
-      muzak.audio.volume = 0.35;
+      muzak.audio.volume = 0.85;
       try { await muzak.audio.play(); muzak.mode = "file"; return true; }
       catch (e) { return false; } // autoplay blocked until a user gesture
     }
@@ -747,7 +747,7 @@
     try { await muzak.ctx.resume(); } catch (e) {}
     if (muzak.ctx.state !== "running") { muzak.ctx.close(); muzak.ctx = null; return false; }
     muzak.gain = muzak.ctx.createGain();
-    muzak.gain.gain.value = 0.13;
+    muzak.gain.gain.value = 0.42;
     muzak.gain.connect(muzak.ctx.destination);
 
     const N = (n) => 440 * Math.pow(2, (n - 69) / 12);
@@ -829,7 +829,7 @@
         for (let i = 0; i < d.length; i += 4) {
           const v = Math.random() * 255;
           d[i] = d[i + 1] = d[i + 2] = v;
-          d[i + 3] = 22 + Math.random() * 26; // faint, shimmering
+          d[i + 3] = 9 + Math.random() * 13; // whisper of grain, weather.com-retro subtle
         }
         ctx2d.putImageData(img, 0, 0);
       }
