@@ -63,41 +63,80 @@ docker run -d --name hdhr-viewer --network host \
 
 ### Homepage dashboard widget
 
-If you run [Homepage](https://github.com/gethomepage/homepage), the app exposes
-`/api/stats` — flat JSON made for the `customapi` widget. Add to `services.yaml`:
+The app exposes `/api/stats` — flat JSON made for the
+[Homepage](https://github.com/gethomepage/homepage) `customapi` widget:
 
-```yaml
-- Media:
-    - HDHomeRun Viewer:
-        icon: mdi-television-classic
-        href: http://<host-ip>:8090
-        description: Live TV
-        widget:
-          type: customapi
-          url: http://<host-ip>:8090/api/stats
-          refreshInterval: 10000
-          mappings:
-            - field: activeStreams
-              label: Streaming
-              format: number
-            - field: tunersFree
-              label: Tuners free
-              format: number
-            - field: channels
-              label: Channels
-              format: number
-            - field: version
-              label: Version
+```json
+{"version": "1.4", "updateAvailable": false, "activeStreams": 1,
+ "tunerCount": 4, "tunersInUse": 1, "tunersFree": 3,
+ "channels": 115, "device": "HDHomeRun FLEX 4K"}
 ```
 
-`/api/stats` also reports `tunersInUse`, `tunerCount`, `device`, and
-`updateAvailable` — pick any four mappings you like. It uses the first saved
-tuner by default; add `?device=<tuner-ip>` to the URL to target another.
+**Step-by-step:**
 
-Homepage also ships a built-in `hdhomerun` widget that talks to the tuner
-directly (`type: hdhomerun`, `url: http://<tuner-ip>`) — that one shows the
-tuner's own channel totals and works even when this app is stopped. Both look
-great side by side.
+1. **Find Homepage's config folder.** It's the folder mounted at `/app/config`
+   of your Homepage container (check its compose file or, on Synology, the
+   volume mapping in Container Manager). It contains `services.yaml`,
+   `settings.yaml`, etc.
+
+2. **Edit `services.yaml`** and add a service entry under whichever group you
+   like (indentation matters — groups are top-level list items, services are
+   nested under them):
+
+   ```yaml
+   - Media:
+       - HDHomeRun Viewer:
+           icon: mdi-television-classic
+           href: http://<host-ip>:8090          # link when the tile is clicked
+           description: Live TV
+           widget:
+             type: customapi
+             url: http://<host-ip>:8090/api/stats
+             refreshInterval: 10000             # poll every 10 s
+             mappings:
+               - field: activeStreams
+                 label: Streaming
+                 format: number
+               - field: tunersFree
+                 label: Tuners free
+                 format: number
+               - field: channels
+                 label: Channels
+                 format: number
+               - field: version
+                 label: Version
+   ```
+
+   Replace `<host-ip>` with the machine running this app (your NAS IP if it
+   runs there). Use a real IP or hostname that the **browser and the Homepage
+   container can both reach** — not `localhost`.
+
+3. **Save** — Homepage hot-reloads config; refresh the dashboard and the tile
+   appears with live numbers. No container restart needed.
+
+**Customizing:**
+
+- `/api/stats` also reports `tunersInUse`, `tunerCount`, `device`, and
+  `updateAvailable` — swap any of them into the four mappings.
+- Multiple tuners? Point the widget at a specific one with
+  `url: http://<host-ip>:8090/api/stats?device=<tuner-ip>`.
+- The endpoint is cheap to poll (10 s response cache), so a low
+  `refreshInterval` is fine.
+
+**Companion widget:** Homepage also ships a native `hdhomerun` widget that
+talks to the tuner directly and works even when this app is stopped:
+
+```yaml
+- HDHomeRun Tuner:
+    icon: mdi-antenna
+    href: http://<tuner-ip>
+    widget:
+      type: hdhomerun
+      url: http://<tuner-ip>
+```
+
+The pair looks great side by side: the native widget for the hardware, the
+customapi one for streaming activity.
 
 ### Versions & updates
 
