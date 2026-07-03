@@ -1,0 +1,24 @@
+services:
+  hdhr-viewer:
+    build: .
+    image: hdhr-web-viewer
+    container_name: hdhr-viewer
+    restart: unless-stopped
+
+    # Bridge mode + port mapping works everywhere, including Docker Desktop
+    # on Windows/Mac. UDP broadcast discovery can't cross the bridge, but the
+    # SiliconDust cloud lookup and manually added IPs (saved in ./data) still
+    # find the tuner.
+    ports:
+      - "8090:8090"
+
+    # --- On a Linux host (NAS, home server), host networking is better:
+    # --- broadcast discovery reaches the tuner directly and no port mapping
+    # --- is needed. Comment out `ports:` above and uncomment this instead.
+    # network_mode: host
+
+    volumes:
+      - ./data:/data
+
+    environment:
+      - HDHR_PORT=8090

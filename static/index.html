@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HDHomeRun Web Viewer</title>
+<script>
+(function () {
+  var m = location.search.match(/[?&]theme=(light|dark)/);
+  var t = m ? m[1] : localStorage.getItem("hdhr_theme");
+  if (!t) t = (window.matchMedia && matchMedia("(prefers-color-scheme: light)").matches) ? "light" : "dark";
+  document.documentElement.dataset.theme = t;
+})();
+</script>
+<link rel="stylesheet" href="/static/style.css?v=6">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&%23128250;</text></svg>">
+</head>
+<body>
+<header>
+  <h1>📺 HDHomeRun <span id="appVersion" title="App version"></span></h1>
+  <nav id="tabs">
+    <button class="tab active" data-view="watch">Watch</button>
+    <button class="tab" data-view="guide">Guide</button>
+    <button class="tab" data-view="device">Device</button>
+  </nav>
+  <button id="nowStreamingBtn" class="hidden" title="Return to stream"></button>
+  <a id="updateBadge" class="hidden" target="_blank" rel="noopener" title="A newer version is available">⬆ Update</a>
+  <div class="header-controls">
+    <select id="deviceSelect" title="Tuner device"></select>
+    <button id="rescanBtn" class="icon-btn" title="Rescan for devices">⟳</button>
+    <button id="addIpBtn" class="icon-btn" title="Add device by IP">＋</button>
+    <button id="themeBtn" class="icon-btn" title="Toggle light / dark theme">☀️</button>
+  </div>
+</header>
+
+<main>
+  <!-- ============ WATCH VIEW ============ -->
+  <div id="watchView" class="view">
+    <aside id="sidebar">
+      <div id="sidebarTools">
+        <input id="search" type="search" placeholder="Search channels &amp; shows…" autocomplete="off">
+        <div id="modeSeg">
+          <button class="seg mode active" data-mode="all">All</button>
+          <button class="seg mode" data-mode="fav">★ Favorites</button>
+          <button class="seg mode" data-mode="hd">HD</button>
+        </div>
+        <div id="toolRow">
+          <button class="tool-btn" id="hideUnavailChip" title="Hide channels with no signal">Hide no-signal</button>
+          <button class="tool-btn" id="sigTestChip" title="Tune through each transmitter and measure real signal strength">📶 Test signal</button>
+        </div>
+      </div>
+      <div id="channelList" class="channel-list">
+        <div class="placeholder">Scanning for HDHomeRun devices…</div>
+      </div>
+    </aside>
+
+    <section id="playerPane">
+      <div id="playerWrap" class="hidden">
+        <video id="video" controls autoplay playsinline></video>
+        <div id="playerBar">
+          <div id="nowPlaying">
+            <span id="npChannel"></span>
+            <span id="npProgram"></span>
+          </div>
+          <div class="player-actions">
+            <select id="qualitySelect" title="Stream quality">
+              <option value="720" selected>720p</option>
+              <option value="native">Native</option>
+              <option value="480">480p</option>
+            </select>
+            <button id="stopBtn">■ Stop</button>
+          </div>
+        </div>
+      </div>
+      <div id="playerIdle">
+        <div class="idle-inner">
+          <div class="idle-icon">📡</div>
+          <p>Select a channel to start watching.</p>
+          <p class="idle-sub">Streams are transcoded on this machine with ffmpeg, so you can watch from any browser on your network.</p>
+        </div>
+      </div>
+      <div id="playerLoading" class="hidden">
+        <div class="spinner"></div>
+        <p id="loadingText">Tuning channel…</p>
+      </div>
+      <div id="playerError" class="hidden">
+        <div class="idle-inner">
+          <div class="idle-icon">⚠️</div>
+          <p id="errorText"></p>
+          <button id="retryBtn">Retry</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============ GUIDE VIEW ============ -->
+  <div id="guideView" class="view hidden">
+    <div id="guideToolbar">
+      <div class="guide-nav">
+        <button id="guideNowBtn">Now</button>
+        <button id="guidePrevBtn" class="icon-btn" title="Earlier">◀</button>
+        <span id="guideRangeLabel"></span>
+        <button id="guideNextBtn" class="icon-btn" title="Later">▶</button>
+      </div>
+      <span class="guide-hint">Click a show that's on now to watch it</span>
+    </div>
+    <div id="guideScroll">
+      <div id="guideGrid">
+        <div class="placeholder" style="padding:40px">Loading guide…</div>
+      </div>
+    </div>
+    <div id="guideDetail" class="hidden">
+      <img id="gdImage" alt="" class="hidden">
+      <div class="gd-text">
+        <div id="gdTitle"></div>
+        <div id="gdMeta"></div>
+        <div id="gdSynopsis"></div>
+      </div>
+      <div class="gd-actions">
+        <button id="gdWatchBtn" class="hidden">▶ Watch</button>
+        <button id="gdCloseBtn" class="icon-btn">✕</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ DEVICE VIEW ============ -->
+  <div id="deviceView" class="view hidden">
+    <div id="devicePanels">
+      <section class="panel" id="deviceInfoPanel">
+        <h2>Device</h2>
+        <div id="deviceInfo" class="kv"></div>
+      </section>
+
+      <section class="panel" id="tunersPanel">
+        <h2>Tuners <span class="live-dot" title="updates every 5 seconds"></span></h2>
+        <div id="tunerList"></div>
+      </section>
+
+      <section class="panel" id="scanPanel">
+        <h2>Channel scan</h2>
+        <p class="panel-note">Rescans over-the-air channels. This takes several minutes and will interrupt any active streams or recordings.</p>
+        <div id="scanControls">
+          <label>Source:
+            <select id="scanSource"></select>
+          </label>
+          <button id="scanStartBtn">Start scan</button>
+          <button id="scanAbortBtn" class="hidden">Abort scan</button>
+        </div>
+        <div id="scanProgressWrap" class="hidden">
+          <div class="progress-track"><div id="scanProgressBar"></div></div>
+          <div id="scanProgressText"></div>
+        </div>
+        <div id="scanResult" class="hidden"></div>
+      </section>
+
+      <section class="panel" id="aboutPanel">
+        <h2>About</h2>
+        <div id="aboutInfo" class="kv"></div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<script src="/static/hls.min.js?v=2"></script>
+<script src="/static/app.js?v=7"></script>
+</body>
+</html>

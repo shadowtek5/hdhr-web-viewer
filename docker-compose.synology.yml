@@ -1,0 +1,29 @@
+# HDHomeRun Web Viewer — Synology deployment
+#
+# DSM 7.2+: Container Manager > Project > Create
+#   - Project name: hdhr-viewer
+#   - Path: pick/create a folder, e.g. /docker/hdhr-viewer
+#   - Source: Upload docker-compose.yml -> choose this file
+#
+# Older DSM / SSH: place this file in a folder and run
+#   sudo docker compose -f docker-compose.synology.yml up -d
+#
+# Then open http://<synology-ip>:8090
+
+services:
+  hdhr-viewer:
+    image: shadowtek5/hdhr-web-viewer:latest
+    container_name: hdhr-viewer
+    restart: unless-stopped
+
+    # Synology is a Linux host, so host networking works: UDP broadcast
+    # discovery reaches the tuner and no port mapping is needed.
+    network_mode: host
+
+    environment:
+      - HDHR_PORT=8090
+
+    volumes:
+      # Saved devices + signal survey results. The folder is created next to
+      # this file (Container Manager creates it inside the project folder).
+      - ./data:/data

@@ -1,0 +1,12 @@
+.claude/
+__pycache__/
+*.pyc
+*.log
+data/
+devices.json
+signals.json
+start.bat
+README.md
+docker-compose.yml
+Dockerfile
+.dockerignore
