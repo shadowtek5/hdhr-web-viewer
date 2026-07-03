@@ -713,7 +713,7 @@
   // -- Background muzak (Web Audio; drop static/music.mp3 in to override) ------
 
   const muzak = { ctx: null, out: null, timer: null, bar: 0, nextBar: 0,
-                  noise: null, audio: null, mode: null, custom: null };
+                  noise: null, audio: null, mode: null, tracks: null, idx: 0 };
 
   function mzTone(freq, t, dur, vol, type, opts) {
     opts = opts || {};
@@ -760,14 +760,30 @@
 
   async function muzakStart() {
     if (muzak.mode) return true;
-    if (muzak.custom === null) {
-      try { muzak.custom = (await fetch("/static/music.mp3", { method: "HEAD" })).ok; }
-      catch (e) { muzak.custom = false; }
+    if (muzak.tracks === null) {
+      try { muzak.tracks = (await api("/api/music")).tracks || []; }
+      catch (e) { muzak.tracks = []; }
+      for (let i = muzak.tracks.length - 1; i > 0; i--) { // shuffle once per session
+        const j = Math.floor(Math.random() * (i + 1));
+        [muzak.tracks[i], muzak.tracks[j]] = [muzak.tracks[j], muzak.tracks[i]];
+      }
     }
-    if (muzak.custom) {
-      muzak.audio = muzak.audio || new Audio("/static/music.mp3");
-      muzak.audio.loop = true;
-      muzak.audio.volume = 0.85;
+    if (muzak.tracks.length) {
+      if (!muzak.audio) {
+        muzak.audio = new Audio();
+        muzak.audio.volume = 0.85;
+        muzak.audio.addEventListener("ended", () => {
+          muzak.idx = (muzak.idx + 1) % muzak.tracks.length;
+          muzak.audio.src = muzak.tracks[muzak.idx];
+          muzak.audio.play().catch(() => {});
+        });
+        muzak.audio.addEventListener("error", () => { // bad file: skip along
+          muzak.idx = (muzak.idx + 1) % muzak.tracks.length;
+          muzak.audio.src = muzak.tracks[muzak.idx];
+          muzak.audio.play().catch(() => {});
+        });
+        muzak.audio.src = muzak.tracks[muzak.idx];
+      }
       try { await muzak.audio.play(); muzak.mode = "file"; return true; }
       catch (e) { return false; } // autoplay blocked until a user gesture
     }

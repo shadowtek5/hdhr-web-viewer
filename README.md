@@ -195,6 +195,14 @@ copy this folder's `data/devices.json` and `data/signals.json` there.
   quality options: 720p (default), Native, 480p
 - Streams stop automatically ~30 s after the last viewer disconnects, freeing the tuner
 
+## Music
+
+The classic guide's background music is royalty-free smooth jazz by Kevin
+MacLeod (incompetech.com), CC BY 4.0 — see [ATTRIBUTION.md](ATTRIBUTION.md).
+The app shuffles every audio file it finds in `static/music/`, so add or swap
+`.mp3`/`.ogg`/`.m4a` tracks freely. If the folder is empty it falls back to a
+built-in synthesized jazz loop.
+
 ## Notes
 
 - Guide data comes from SiliconDust's free API: titles, times, episode numbers,

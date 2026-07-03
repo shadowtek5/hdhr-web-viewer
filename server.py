@@ -668,6 +668,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.api_device_proxy(query, "/status.json")
             elif path == "/api/version":
                 self.send_json(version_info())
+            elif path == "/api/music":
+                self.api_music()
             elif path == "/api/stats":
                 ip = query.get("device", [None])[0]
                 if ip and not valid_ip(ip):
@@ -787,6 +789,18 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             self.send_json({"guide": []})  # no internet / no auth: degrade quietly
 
+    def api_music(self):
+        """Playlist for the classic guide: audio files in static/music/."""
+        music_dir = os.path.join(STATIC_DIR, "music")
+        tracks = []
+        try:
+            for name in sorted(os.listdir(music_dir)):
+                if name.lower().endswith((".mp3", ".ogg", ".m4a")):
+                    tracks.append("/static/music/" + urllib.parse.quote(name))
+        except OSError:
+            pass
+        self.send_json({"tracks": tracks})
+
     def api_device_proxy(self, query, device_path):
         ip = query.get("device", [None])[0]
         if not ip or not valid_ip(ip):
@@ -846,10 +860,12 @@ class Handler(BaseHTTPRequestHandler):
         if not os.path.isfile(file_path):
             return self.send_json({"error": "Not found"}, 404)
         ctype = mimetypes.guess_type(file_path)[0] or "application/octet-stream"
-        # Only the versioned hls.js library is safe to cache long-term; the app's
-        # own js/css must always be revalidated or updates break button handlers.
+        # Only versioned/immutable assets (hls.js, music) are safe to cache
+        # long-term; the app's own js/css must always be revalidated or
+        # updates break button handlers.
+        cacheable = rel.endswith(("hls.min.js", ".mp3", ".ogg", ".m4a"))
         with open(file_path, "rb") as f:
-            self.send_file_bytes(f.read(), ctype, cache=rel.endswith("hls.min.js"))
+            self.send_file_bytes(f.read(), ctype, cache=cacheable)
 
 
 class QuietServer(ThreadingHTTPServer):
