@@ -18,7 +18,10 @@
     appVersion: $("appVersion"),
     classicBtn: $("classicBtn"), classicView: $("classicView"), classicExit: $("classicExit"),
     classicRows: $("classicRows"), classicClock: $("classicClock"), classicDate: $("classicDate"),
-    classicTicker: $("classicTicker"),
+    classicVideo: $("classicVideo"), classicPreviewPh: $("classicPreviewPh"),
+    ciChannel: $("ciChannel"), ciTitle: $("ciTitle"), ciTime: $("ciTime"), ciNext: $("ciNext"),
+    ciWatchBtn: $("ciWatchBtn"), classicMusicBtn: $("classicMusicBtn"),
+    crtBtn: $("crtBtn"), crtNoise: $("crtNoise"),
     clSlots: [$("clSlot0"), $("clSlot1"), $("clSlot2")],
     playerWrap: $("playerWrap"), playerIdle: $("playerIdle"),
     playerLoading: $("playerLoading"), loadingText: $("loadingText"),
@@ -581,15 +584,267 @@
     // Rebuild on the half-hour so the slots roll over
     state.classicRebuildAt = (Math.floor(Date.now() / 1000 / 1800) + 1) * 1800;
     try { els.classicView.requestFullscreen(); } catch (e) {}
+    preview.attempts = 0;
+    const previewCh = pickPreviewChannel();
+    if (previewCh) classicPreviewChannel(previewCh);
+    else classicUpdateInfo(null);
+    if (localStorage.getItem("hdhr_muzak") !== "off") muzakStart();
+    updateMusicBtn();
+    setCrt(localStorage.getItem("hdhr_crt") === "on" || /[?&]crt=1/.test(location.search));
   }
 
   function classicClose() {
     els.classicView.classList.add("hidden");
     stopTimer("classic");
+    classicStopPreview();
+    muzakStop();
+    setCrt(false, true); // stop the noise loop; keep the saved preference
     if (document.fullscreenElement) {
       try { document.exitFullscreen(); } catch (e) {}
     }
   }
+
+  // -- Preview window ---------------------------------------------------------
+
+  const preview = { id: null, hls: null, ch: null, attempts: 0 };
+
+  function previewCandidates() {
+    // Reliability first: surveyed-good, then untested, then weak.
+    // Favorites win within a tier. The real Prevue never showed dead air.
+    const tier = (c) => {
+      const s = signalFor(c);
+      if (!s || s.status === "unknown") return 1;
+      return s.status === "good" ? 0 : 2;
+    };
+    return state.lineup
+      .filter((c) => !c.DRM && !noSignal(c))
+      .sort((a, b) =>
+        tier(a) - tier(b) ||
+        (state.favorites.has(b.GuideNumber) ? 1 : 0) - (state.favorites.has(a.GuideNumber) ? 1 : 0) ||
+        parseFloat(a.GuideNumber) - parseFloat(b.GuideNumber));
+  }
+
+  function pickPreviewChannel() {
+    if (state.current) return state.current;
+    return previewCandidates()[0] || null;
+  }
+
+  function previewTryNext(failed) {
+    preview.attempts += 1;
+    if (preview.attempts >= 4) return; // give up quietly, leave the placeholder
+    const cands = previewCandidates();
+    const idx = cands.findIndex((c) => c.GuideNumber === failed.GuideNumber);
+    const next = cands[idx + 1] || cands[0];
+    if (next && next.GuideNumber !== failed.GuideNumber) classicPreviewChannel(next);
+  }
+
+  function classicStopPreview() {
+    if (preview.hls) { preview.hls.destroy(); preview.hls = null; }
+    els.classicVideo.removeAttribute("src");
+    try { els.classicVideo.load(); } catch (e) {}
+    if (preview.id) {
+      post("/api/stream/stop", { id: preview.id }).catch(() => {});
+      preview.id = null;
+    }
+  }
+
+  async function classicPreviewChannel(ch) {
+    if (preview.ch && preview.ch.GuideNumber === ch.GuideNumber && preview.id) return;
+    classicStopPreview();
+    preview.ch = ch;
+    classicUpdateInfo(ch);
+    els.classicPreviewPh.textContent = "TUNING…";
+    els.classicPreviewPh.classList.remove("hidden");
+    try {
+      const data = await post("/api/stream/start", {
+        device: deviceIp(), channel: String(ch.GuideNumber), quality: "480",
+      });
+      if (preview.ch !== ch || els.classicView.classList.contains("hidden")) {
+        post("/api/stream/stop", { id: data.id }).catch(() => {});
+        return;
+      }
+      preview.id = data.id;
+      if (window.Hls && Hls.isSupported()) {
+        preview.hls = new Hls({ liveDurationInfinity: true, maxBufferLength: 12, liveSyncDurationCount: 3 });
+        preview.hls.loadSource(data.playlist);
+        preview.hls.attachMedia(els.classicVideo);
+        preview.hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          els.classicPreviewPh.classList.add("hidden");
+          els.classicVideo.play().catch(() => {});
+        });
+        preview.hls.on(Hls.Events.ERROR, (_e, d) => {
+          if (!d.fatal) return;
+          if (d.type === Hls.ErrorTypes.NETWORK_ERROR) preview.hls.startLoad();
+          else if (d.type === Hls.ErrorTypes.MEDIA_ERROR) preview.hls.recoverMediaError();
+          else { els.classicPreviewPh.textContent = "NO PREVIEW"; els.classicPreviewPh.classList.remove("hidden"); }
+        });
+      } else if (els.classicVideo.canPlayType("application/vnd.apple.mpegurl")) {
+        els.classicVideo.src = data.playlist;
+        els.classicVideo.play().catch(() => {});
+        els.classicPreviewPh.classList.add("hidden");
+      }
+    } catch (e) {
+      els.classicPreviewPh.textContent = "NO PREVIEW";
+      previewTryNext(ch);
+    }
+  }
+
+  function classicUpdateInfo(ch) {
+    if (!ch) {
+      els.ciChannel.textContent = "";
+      els.ciTitle.textContent = "NO CHANNELS AVAILABLE";
+      els.ciTime.textContent = "";
+      els.ciNext.textContent = "";
+      return;
+    }
+    els.ciChannel.textContent = ch.GuideNumber + "  " + (ch.GuideName || "").toUpperCase();
+    const entry = (state.guidePages[0] || []).find((g) => g.GuideNumber === ch.GuideNumber);
+    const now = Date.now() / 1000;
+    const progs = (entry || {}).Guide || [];
+    const cur = progs.find((p) => p.StartTime <= now && now < p.EndTime);
+    const next = progs.find((p) => p.StartTime >= (cur ? cur.EndTime : now));
+    els.ciTitle.textContent = (cur ? cur.Title : (state.nowTitles[ch.GuideNumber] || "NO LISTING DATA")).toUpperCase();
+    els.ciTime.textContent = cur
+      ? fmtTime(cur.StartTime) + " – " + fmtTime(cur.EndTime) + (cur.EpisodeNumber ? "  •  " + cur.EpisodeNumber : "")
+      : "";
+    els.ciNext.textContent = next ? "NEXT  " + fmtTime(next.StartTime) + "  " + (next.Title || "").toUpperCase() : "";
+  }
+
+  // -- Background muzak (Web Audio; drop static/music.mp3 in to override) ------
+
+  const muzak = { ctx: null, gain: null, timer: null, step: 0, audio: null, mode: null, custom: null };
+
+  function muzakNote(freq, t, dur, vol, type) {
+    const o = muzak.ctx.createOscillator();
+    o.type = type;
+    o.frequency.value = freq;
+    const g = muzak.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g);
+    g.connect(muzak.gain);
+    o.start(t);
+    o.stop(t + dur + 0.1);
+  }
+
+  async function muzakStart() {
+    if (muzak.mode) return true;
+    if (muzak.custom === null) {
+      try { muzak.custom = (await fetch("/static/music.mp3", { method: "HEAD" })).ok; }
+      catch (e) { muzak.custom = false; }
+    }
+    if (muzak.custom) {
+      muzak.audio = muzak.audio || new Audio("/static/music.mp3");
+      muzak.audio.loop = true;
+      muzak.audio.volume = 0.35;
+      try { await muzak.audio.play(); muzak.mode = "file"; return true; }
+      catch (e) { return false; } // autoplay blocked until a user gesture
+    }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return false;
+    muzak.ctx = new AC();
+    try { await muzak.ctx.resume(); } catch (e) {}
+    if (muzak.ctx.state !== "running") { muzak.ctx.close(); muzak.ctx = null; return false; }
+    muzak.gain = muzak.ctx.createGain();
+    muzak.gain.gain.value = 0.13;
+    muzak.gain.connect(muzak.ctx.destination);
+
+    const N = (n) => 440 * Math.pow(2, (n - 69) / 12);
+    const MAJ7 = [0, 4, 7, 11], MIN7 = [0, 3, 7, 10], DOM7 = [0, 4, 7, 10];
+    const CHORDS = [ // a gentle ii-V-I stroll in C — pure elevator
+      { root: 48, iv: MAJ7 }, { root: 45, iv: MIN7 }, { root: 50, iv: MIN7 }, { root: 43, iv: DOM7 },
+      { root: 48, iv: MAJ7 }, { root: 41, iv: MAJ7 }, { root: 50, iv: MIN7 }, { root: 43, iv: DOM7 },
+    ];
+    const PENTA = [0, 2, 4, 7, 9];
+    const chordDur = 3.2;
+    const playChord = () => {
+      if (!muzak.ctx) return;
+      const t = muzak.ctx.currentTime + 0.05;
+      const c = CHORDS[muzak.step % CHORDS.length];
+      muzak.step += 1;
+      for (const off of c.iv) muzakNote(N(c.root + 12 + off), t, chordDur * 0.95, 0.05, "triangle");
+      muzakNote(N(c.root - 12), t, 1.5, 0.11, "sine");                          // bass on 1
+      muzakNote(N(c.root - 12 + c.iv[2]), t + chordDur / 2, 1.3, 0.08, "sine"); // fifth on 3
+      let mt = t + 0.5;
+      for (let k = 0; k < 3; k++) { // wandering soft lead
+        if (Math.random() < 0.65) {
+          muzakNote(N(c.root + 24 + PENTA[Math.floor(Math.random() * PENTA.length)]), mt, 1.0, 0.035, "sine");
+        }
+        mt += chordDur / 3.5;
+      }
+    };
+    playChord();
+    muzak.timer = setInterval(playChord, chordDur * 1000);
+    muzak.mode = "synth";
+    return true;
+  }
+
+  function muzakStop() {
+    if (muzak.timer) { clearInterval(muzak.timer); muzak.timer = null; }
+    if (muzak.audio && muzak.mode === "file") muzak.audio.pause();
+    if (muzak.ctx) { try { muzak.ctx.close(); } catch (e) {} muzak.ctx = null; }
+    muzak.mode = null;
+  }
+
+  function updateMusicBtn() {
+    els.classicMusicBtn.textContent = muzak.mode ? "♫ MUSIC ON" : "♫ MUSIC OFF";
+  }
+
+  els.classicMusicBtn.addEventListener("click", async () => {
+    if (muzak.mode) {
+      muzakStop();
+      localStorage.setItem("hdhr_muzak", "off");
+    } else {
+      await muzakStart();
+      localStorage.setItem("hdhr_muzak", "on");
+    }
+    updateMusicBtn();
+  });
+
+  // -- CRT overlay (scanlines + animated snow + flicker) ------------------------
+
+  const crt = { on: false, raf: null };
+
+  function setCrt(on, keepPref) {
+    crt.on = on;
+    els.classicView.classList.toggle("crt-on", on);
+    els.crtBtn.textContent = on ? "📺 CRT ON" : "📺 CRT";
+    if (!keepPref) localStorage.setItem("hdhr_crt", on ? "on" : "off");
+    if (on && !crt.raf) crtNoiseLoop();
+    if (!on && crt.raf) { cancelAnimationFrame(crt.raf); crt.raf = null; }
+  }
+
+  function crtNoiseLoop() {
+    const canvas = els.crtNoise;
+    const ctx2d = canvas.getContext("2d");
+    canvas.width = 240; canvas.height = 135; // chunky analog grain, scaled up by CSS
+    let frame = 0;
+    const draw = () => {
+      if (!crt.on) { crt.raf = null; return; }
+      frame += 1;
+      if (frame % 2 === 0) { // ~30fps is plenty for snow
+        const img = ctx2d.createImageData(canvas.width, canvas.height);
+        const d = img.data;
+        for (let i = 0; i < d.length; i += 4) {
+          const v = Math.random() * 255;
+          d[i] = d[i + 1] = d[i + 2] = v;
+          d[i + 3] = 22 + Math.random() * 26; // faint, shimmering
+        }
+        ctx2d.putImageData(img, 0, 0);
+      }
+      crt.raf = requestAnimationFrame(draw);
+    };
+    crt.raf = requestAnimationFrame(draw);
+  }
+
+  els.crtBtn.addEventListener("click", () => setCrt(!crt.on));
+
+  els.ciWatchBtn.addEventListener("click", () => {
+    const ch = preview.ch;
+    classicClose();
+    if (ch) playChannel(ch);
+  });
 
   function classicTickClock() {
     const d = new Date();
@@ -653,11 +908,7 @@
     const rowCount = channels.length || 1;
     els.classicRows.style.animationDuration = Math.max(30, rowCount * 2.2) + "s";
 
-    // Ticker: what's on the current channel, else a rotating tagline
-    const nowTitle = state.current ? (state.nowTitles[state.current.GuideNumber] || "") : "";
-    els.classicTicker.textContent = state.current
-      ? ("NOW WATCHING  " + state.current.GuideNumber + " " + (state.current.GuideName || "").toUpperCase() + (nowTitle ? "  •  " + nowTitle.toUpperCase() : ""))
-      : "ALL TIMES LOCAL  •  " + channels.length + " CHANNELS  •  CLICK A ROW TO WATCH";
+    if (preview.ch) classicUpdateInfo(preview.ch); // listings may have rolled over
   }
 
   els.classicBtn.addEventListener("click", classicOpen);
@@ -669,7 +920,7 @@
     const row = ev.target.closest(".cl-row");
     if (!row || !row.dataset.num) return;
     const ch = state.lineup.find((c) => String(c.GuideNumber) === row.dataset.num);
-    if (ch && !ch.DRM) { classicClose(); playChannel(ch); }
+    if (ch && !ch.DRM) { preview.attempts = 0; classicPreviewChannel(ch); } // click = preview it up top
   });
 
   // ---- Device view ----------------------------------------------------------
@@ -971,9 +1222,12 @@
   els.gdCloseBtn.addEventListener("click", hideGuideDetail);
 
   window.addEventListener("beforeunload", () => {
-    if (state.sessionId && navigator.sendBeacon) {
-      navigator.sendBeacon("/api/stream/stop",
-        new Blob([JSON.stringify({ id: state.sessionId })], { type: "application/json" }));
+    if (!navigator.sendBeacon) return;
+    for (const sid of [state.sessionId, preview.id]) {
+      if (sid) {
+        navigator.sendBeacon("/api/stream/stop",
+          new Blob([JSON.stringify({ id: sid })], { type: "application/json" }));
+      }
     }
   });
 

@@ -551,29 +551,72 @@ video { flex: 1; width: 100%; min-height: 0; background: #000; }
 
 #classicTop {
   display: flex;
-  align-items: center;
-  gap: 24px;
-  padding: 18px 28px;
+  align-items: stretch;
+  gap: 22px;
+  padding: 16px 24px;
+  height: 38%;
+  min-height: 240px;
   background: linear-gradient(180deg, #2a2a9a 0%, #12126a 100%);
   border-bottom: 4px solid #8888d8;
   box-shadow: 0 4px 18px rgba(0, 0, 0, 0.6);
   flex-shrink: 0;
+  position: relative;
 }
 
-#classicBrand { display: flex; flex-direction: column; line-height: 1; flex-shrink: 0; }
-.cb-line1 { font-size: 1rem; font-weight: 800; letter-spacing: 0.28em; color: #b8c4ff; }
-.cb-line2 {
-  font-size: 2.3rem;
+#classicPreview {
+  flex: 0 0 42%;
+  position: relative;
+  background: #000;
+  border: 3px solid #8888d8;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 0 24px rgba(0, 0, 40, 0.8) inset, 4px 4px 0 #000050;
+}
+#classicVideo { width: 100%; height: 100%; object-fit: contain; background: #000; }
+#classicPreviewPh {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.4rem;
   font-weight: 900;
   font-style: italic;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.2em;
   color: #ffd700;
-  text-shadow: 3px 3px 0 #000050, -1px -1px 0 #000050;
+  text-shadow: 4px 4px 0 #000050;
+  background: repeating-linear-gradient(45deg, #000038 0 18px, #000048 18px 36px);
 }
 
-#classicNowNext { flex: 1; min-width: 0; overflow: hidden; }
-#classicTicker {
-  font-size: 1.05rem;
+#classicInfo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+}
+#ciChannel {
+  font-size: 1.15rem;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  color: #ffd700;
+  text-shadow: 2px 2px 0 #000040;
+}
+#ciTitle {
+  font-size: 1.7rem;
+  font-weight: 900;
+  color: #fff;
+  text-shadow: 3px 3px 0 #000050;
+  line-height: 1.15;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+#ciTime { font-size: 1rem; font-weight: 800; letter-spacing: 0.1em; color: #b8c4ff; text-shadow: 2px 2px 0 #000040; }
+#ciNext {
+  font-size: 0.9rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   color: #e8ecff;
@@ -582,29 +625,88 @@ video { flex: 1; width: 100%; min-height: 0; background: #000; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.ci-actions { display: flex; gap: 10px; margin-top: 6px; }
+.ci-actions button {
+  background: rgba(0, 0, 64, 0.5);
+  border: 2px solid #8888d8;
+  color: #ffd700;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+.ci-actions button:hover { background: rgba(40, 40, 140, 0.8); }
 
-#classicClockWrap { text-align: right; flex-shrink: 0; }
+#classicRight {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding-right: 44px;
+}
+#classicBrand { display: flex; flex-direction: column; line-height: 1; align-items: flex-end; margin-bottom: 8px; }
+.cb-line1 { font-size: 0.85rem; font-weight: 800; letter-spacing: 0.28em; color: #b8c4ff; }
+.cb-line2 {
+  font-size: 2rem;
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: 0.12em;
+  color: #ffd700;
+  text-shadow: 3px 3px 0 #000050, -1px -1px 0 #000050;
+}
 #classicClock {
-  font-size: 2.6rem;
+  font-size: 2.4rem;
   font-weight: 900;
   font-variant-numeric: tabular-nums;
   color: #fff;
   text-shadow: 3px 3px 0 #000050;
   line-height: 1;
 }
-#classicDate { font-size: 0.95rem; font-weight: 800; letter-spacing: 0.22em; color: #ffd700; margin-top: 4px; }
+#classicDate { font-size: 0.9rem; font-weight: 800; letter-spacing: 0.22em; color: #ffd700; }
 
 #classicExit {
+  position: absolute;
+  top: 12px;
+  right: 12px;
   background: rgba(0, 0, 64, 0.5);
   border: 2px solid #8888d8;
   color: #fff;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border-radius: 8px;
-  font-size: 1.1rem;
-  flex-shrink: 0;
+  font-size: 1rem;
+  z-index: 8;
 }
 #classicExit:hover { background: rgba(40, 40, 140, 0.8); }
+
+/* -- CRT mode: snow, heavy scanlines, flicker, vignette -- */
+
+#crtNoise, #crtVignette { display: none; position: absolute; inset: 0; pointer-events: none; }
+#crtNoise { width: 100%; height: 100%; z-index: 6; image-rendering: pixelated; }
+#crtVignette {
+  z-index: 7;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 20, 0.55) 100%);
+}
+.crt-on #crtNoise, .crt-on #crtVignette { display: block; }
+.crt-on::after {
+  background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.32) 0 2px, transparent 2px 4px);
+}
+.crt-on #classicTop, .crt-on #classicHead, .crt-on #classicScroll {
+  filter: blur(0.4px) saturate(1.25) contrast(1.06);
+  animation: crtFlicker 4s steps(1) infinite;
+}
+@keyframes crtFlicker {
+  0%, 100% { opacity: 1; }
+  93% { opacity: 1; }
+  93.5% { opacity: 0.92; }
+  94% { opacity: 1; }
+  97% { opacity: 0.96; }
+  97.4% { opacity: 1; }
+}
 
 #classicHead {
   display: flex;
@@ -691,9 +793,12 @@ video { flex: 1; width: 100%; min-height: 0; background: #000; }
 .cl-none { color: #5a5ab0; font-weight: 700; }
 
 @media (max-width: 720px) {
-  #classicBrand .cb-line2 { font-size: 1.5rem; }
-  #classicClock { font-size: 1.7rem; }
-  #classicNowNext { display: none; }
+  #classicTop { height: 32%; min-height: 170px; gap: 10px; padding: 10px 12px; }
+  #classicPreview { flex: 1; }
+  #classicInfo { display: none; }
+  #classicRight { padding-right: 40px; }
+  .cb-line2 { font-size: 1.3rem; }
+  #classicClock { font-size: 1.5rem; }
   .cl-title { font-size: 0.85rem; }
   .cl-num { font-size: 1.05rem; }
   .cl-name { display: none; }
