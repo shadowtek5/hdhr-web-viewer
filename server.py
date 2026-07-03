@@ -28,7 +28,7 @@ import uuid
 import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-APP_VERSION = "1.4"
+APP_VERSION = "1.5"
 UPDATE_REPO = "shadowtek5/hdhr-web-viewer"  # Docker Hub repo checked for newer tags
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -234,6 +234,24 @@ def version_info():
 _stats_lock = threading.Lock()
 _stats_cache = {}         # ip-or-'' -> (ts, data)
 _lineup_count_cache = {}  # ip -> (ts, count)
+_stats_device = {"ts": 0.0, "ip": None}
+
+
+def find_stats_device():
+    """Best device to report stats for: saved file, else live discovery
+    (UDP broadcast, then cloud). Found IPs cache 1h; misses retry after 60s."""
+    saved = load_saved_ips()
+    if saved:
+        return saved[0]
+    with _stats_lock:
+        age = time.time() - _stats_device["ts"]
+        if age < (3600 if _stats_device["ip"] else 60):
+            return _stats_device["ip"]
+    ips = discover_device_ips(timeout=1.5) or discover_cloud()
+    ip = ips[0] if ips else None
+    with _stats_lock:
+        _stats_device.update(ts=time.time(), ip=ip)
+    return ip
 
 
 def _lineup_count(ip):
@@ -266,10 +284,7 @@ def collect_stats(ip=None):
         "tunerCount": None, "tunersInUse": None, "tunersFree": None,
         "channels": None, "device": None,
     }
-    target = ip
-    if not target:
-        saved = load_saved_ips()
-        target = saved[0] if saved else None
+    target = ip or find_stats_device()
     if target:
         try:
             status = http_get_json(f"http://{target}/status.json", timeout=3)
@@ -741,8 +756,7 @@ class Handler(BaseHTTPRequestHandler):
         for ip in ips:
             try:
                 devices.append(fetch_device_info(ip))
-                if manual:
-                    save_ip(ip)  # remember it for future auto-discovery
+                save_ip(ip)  # remember every reachable tuner (stats, restarts)
             except Exception as exc:
                 errors.append({"ip": ip, "error": str(exc)})
         self.send_json({"devices": devices, "errors": errors})
