@@ -12,7 +12,7 @@
   document.documentElement.dataset.theme = t;
 })();
 </script>
-<link rel="stylesheet" href="/static/style.css?v=6">
+<link rel="stylesheet" href="/static/style.css?v=7">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&%23128250;</text></svg>">
 </head>
 <body>
@@ -103,6 +103,7 @@
         <button id="guideNextBtn" class="icon-btn" title="Later">▶</button>
       </div>
       <span class="guide-hint">Click a show that's on now to watch it</span>
+      <button id="classicBtn" title="Classic scrolling guide channel — the full Prevue experience">📼 Classic</button>
     </div>
     <div id="guideScroll">
       <div id="guideGrid">
@@ -161,7 +162,29 @@
   </div>
 </main>
 
+<!-- ============ CLASSIC GUIDE CHANNEL (Prevue-style) ============ -->
+<div id="classicView" class="hidden">
+  <div id="classicTop">
+    <div id="classicBrand"><span class="cb-line1">HDHOMERUN</span><span class="cb-line2">GUIDE</span></div>
+    <div id="classicNowNext">
+      <div id="classicTicker"></div>
+    </div>
+    <div id="classicClockWrap">
+      <div id="classicClock">--:--:--</div>
+      <div id="classicDate"></div>
+    </div>
+    <button id="classicExit" title="Exit (Esc)">✕</button>
+  </div>
+  <div id="classicHead">
+    <div class="cl-ch-head">CHANNEL</div>
+    <div class="cl-slots-head"><span id="clSlot0"></span><span id="clSlot1"></span><span id="clSlot2"></span></div>
+  </div>
+  <div id="classicScroll">
+    <div id="classicRows"></div>
+  </div>
+</div>
+
 <script src="/static/hls.min.js?v=2"></script>
-<script src="/static/app.js?v=7"></script>
+<script src="/static/app.js?v=8"></script>
 </body>
 </html>

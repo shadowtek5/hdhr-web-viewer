@@ -28,7 +28,7 @@ import uuid
 import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-APP_VERSION = "1.5"
+APP_VERSION = "1.6"
 UPDATE_REPO = "shadowtek5/hdhr-web-viewer"  # Docker Hub repo checked for newer tags
 
 ROOT = os.path.dirname(os.path.abspath(__file__))

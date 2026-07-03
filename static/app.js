@@ -16,6 +16,10 @@
     updateBadge: $("updateBadge"),
     aboutInfo: $("aboutInfo"),
     appVersion: $("appVersion"),
+    classicBtn: $("classicBtn"), classicView: $("classicView"), classicExit: $("classicExit"),
+    classicRows: $("classicRows"), classicClock: $("classicClock"), classicDate: $("classicDate"),
+    classicTicker: $("classicTicker"),
+    clSlots: [$("clSlot0"), $("clSlot1"), $("clSlot2")],
     playerWrap: $("playerWrap"), playerIdle: $("playerIdle"),
     playerLoading: $("playerLoading"), loadingText: $("loadingText"),
     playerError: $("playerError"), errorText: $("errorText"), retryBtn: $("retryBtn"),
@@ -53,7 +57,8 @@
     current: null,
     sessionId: null,
     hls: null,
-    timers: { guideNow: null, tuners: null, scan: null, nowline: null, sig: null },
+    pendingClassic: false,
+    timers: { guideNow: null, tuners: null, scan: null, nowline: null, sig: null, classic: null },
   };
 
   // ---- API ----------------------------------------------------------------
@@ -159,6 +164,8 @@
       renderChannels();
       updateNowPlayingBar();
       if (state.view === "guide" && state.guidePage === null) renderGuide();
+      if (state.pendingClassic) { state.pendingClassic = false; classicOpen(); }
+      else if (!els.classicView.classList.contains("hidden")) buildClassic();
     } catch (e) { /* guide is best-effort */ }
   }
 
@@ -563,6 +570,108 @@
 
   function hideGuideDetail() { els.guideDetail.classList.add("hidden"); }
 
+  // ---- Classic guide channel (Prevue-style) -----------------------------------
+
+  function classicOpen() {
+    els.classicView.classList.remove("hidden");
+    buildClassic();
+    classicTickClock();
+    stopTimer("classic");
+    state.timers.classic = setInterval(classicTickClock, 1000);
+    // Rebuild on the half-hour so the slots roll over
+    state.classicRebuildAt = (Math.floor(Date.now() / 1000 / 1800) + 1) * 1800;
+    try { els.classicView.requestFullscreen(); } catch (e) {}
+  }
+
+  function classicClose() {
+    els.classicView.classList.add("hidden");
+    stopTimer("classic");
+    if (document.fullscreenElement) {
+      try { document.exitFullscreen(); } catch (e) {}
+    }
+  }
+
+  function classicTickClock() {
+    const d = new Date();
+    els.classicClock.textContent = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
+    els.classicDate.textContent = d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" }).toUpperCase();
+    if (state.classicRebuildAt && Date.now() / 1000 >= state.classicRebuildAt) {
+      state.classicRebuildAt = (Math.floor(Date.now() / 1000 / 1800) + 1) * 1800;
+      buildClassic();
+    }
+  }
+
+  async function buildClassic() {
+    let guide = state.guidePages[0];
+    if (!guide) {
+      try { guide = await fetchGuidePage(null); } catch (e) { guide = []; }
+    }
+    const byNum = {};
+    for (const g of guide || []) byNum[g.GuideNumber] = g;
+
+    const slot0 = Math.floor(Date.now() / 1000 / 1800) * 1800;
+    const slots = [slot0, slot0 + 1800, slot0 + 3600];
+    const end = slot0 + 5400;
+    els.clSlots.forEach((el, i) => { el.textContent = fmtTime(slots[i]); });
+
+    const channels = state.lineup
+      .filter((ch) => !(state.hideUnavail && noSignal(ch)))
+      .sort((a, b) => parseFloat(a.GuideNumber) - parseFloat(b.GuideNumber));
+
+    let html = "";
+    for (const ch of channels) {
+      const progs = (byNum[ch.GuideNumber] || {}).Guide || [];
+      let cells = "";
+      let i = 0;
+      while (i < 3) {
+        const t = slots[i];
+        const prog = progs.find((p) => p.StartTime <= t && t < p.EndTime);
+        if (!prog) {
+          cells += '<div class="cl-cell" style="width:' + (100 / 3) + '%"><span class="cl-none">—</span></div>';
+          i += 1;
+          continue;
+        }
+        let span = 1;
+        while (i + span < 3 && prog.EndTime > slots[i + span]) span += 1;
+        const cont = prog.StartTime < slot0 ? "&lt; " : "";
+        const runs = prog.EndTime > end ? " &gt;" : "";
+        cells += '<div class="cl-cell" style="width:' + (span * 100 / 3) + '%">' +
+          '<span class="cl-title">' + cont + escapeHtml(prog.Title || "") + runs + "</span></div>";
+        i += span;
+      }
+      html += '<div class="cl-row" data-num="' + escapeHtml(ch.GuideNumber) + '">' +
+        '<div class="cl-ch"><span class="cl-num">' + escapeHtml(ch.GuideNumber) + "</span>" +
+        '<span class="cl-name">' + escapeHtml((ch.GuideName || "").toUpperCase()) + "</span></div>" +
+        '<div class="cl-slots">' + cells + "</div></div>";
+    }
+    if (!html) {
+      html = '<div class="cl-row"><div class="cl-ch"><span class="cl-name">NO LISTINGS</span></div></div>';
+    }
+
+    // Duplicate the rows so the CSS loop (translateY -50%) is seamless.
+    els.classicRows.innerHTML = html + html;
+    const rowCount = channels.length || 1;
+    els.classicRows.style.animationDuration = Math.max(30, rowCount * 2.2) + "s";
+
+    // Ticker: what's on the current channel, else a rotating tagline
+    const nowTitle = state.current ? (state.nowTitles[state.current.GuideNumber] || "") : "";
+    els.classicTicker.textContent = state.current
+      ? ("NOW WATCHING  " + state.current.GuideNumber + " " + (state.current.GuideName || "").toUpperCase() + (nowTitle ? "  •  " + nowTitle.toUpperCase() : ""))
+      : "ALL TIMES LOCAL  •  " + channels.length + " CHANNELS  •  CLICK A ROW TO WATCH";
+  }
+
+  els.classicBtn.addEventListener("click", classicOpen);
+  els.classicExit.addEventListener("click", classicClose);
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape" && !els.classicView.classList.contains("hidden")) classicClose();
+  });
+  els.classicRows.addEventListener("click", (ev) => {
+    const row = ev.target.closest(".cl-row");
+    if (!row || !row.dataset.num) return;
+    const ch = state.lineup.find((c) => String(c.GuideNumber) === row.dataset.num);
+    if (ch && !ch.DRM) { classicClose(); playChannel(ch); }
+  });
+
   // ---- Device view ----------------------------------------------------------
 
   function currentDevice() {
@@ -886,6 +995,7 @@
   renderFilterChips();
   const initialView = location.hash.slice(1);
   if (initialView === "guide" || initialView === "device") setView(initialView);
+  if (initialView === "classic") state.pendingClassic = true;
   loadVersion();
   setInterval(loadVersion, 12 * 60 * 60 * 1000); // long-lived tabs re-check twice a day
   discover();
