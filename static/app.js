@@ -61,8 +61,10 @@
     sessionId: null,
     hls: null,
     pendingClassic: false,
-    timers: { guideNow: null, tuners: null, scan: null, nowline: null, sig: null, classic: null },
+    timers: { guideNow: null, tuners: null, scan: null, nowline: null, sig: null, classic: null, cycle: null },
   };
+
+  const CLASSIC_CYCLE_MS = 30 * 1000; // preview hops channels like the real Prevue
 
   // ---- API ----------------------------------------------------------------
 
@@ -588,6 +590,7 @@
     const previewCh = pickPreviewChannel();
     if (previewCh) classicPreviewChannel(previewCh);
     else classicUpdateInfo(null);
+    restartPreviewCycle();
     if (localStorage.getItem("hdhr_muzak") !== "off") muzakStart();
     updateMusicBtn();
     setCrt(localStorage.getItem("hdhr_crt") === "on" || /[?&]crt=1/.test(location.search));
@@ -596,6 +599,7 @@
   function classicClose() {
     els.classicView.classList.add("hidden");
     stopTimer("classic");
+    stopTimer("cycle");
     classicStopPreview();
     muzakStop();
     setCrt(false, true); // stop the noise loop; keep the saved preference
@@ -627,6 +631,18 @@
   function pickPreviewChannel() {
     if (state.current) return state.current;
     return previewCandidates()[0] || null;
+  }
+
+  function restartPreviewCycle() {
+    stopTimer("cycle");
+    state.timers.cycle = setInterval(() => {
+      if (els.classicView.classList.contains("hidden")) { stopTimer("cycle"); return; }
+      const cands = previewCandidates();
+      if (!cands.length) return;
+      const idx = preview.ch ? cands.findIndex((c) => c.GuideNumber === preview.ch.GuideNumber) : -1;
+      preview.attempts = 0;
+      classicPreviewChannel(cands[(idx + 1) % cands.length]);
+    }, CLASSIC_CYCLE_MS);
   }
 
   function previewTryNext(failed) {
@@ -1009,7 +1025,11 @@
     const row = ev.target.closest(".cl-row");
     if (!row || !row.dataset.num) return;
     const ch = state.lineup.find((c) => String(c.GuideNumber) === row.dataset.num);
-    if (ch && !ch.DRM) { preview.attempts = 0; classicPreviewChannel(ch); } // click = preview it up top
+    if (ch && !ch.DRM) { // click = preview it up top; cycle resumes from here
+      preview.attempts = 0;
+      classicPreviewChannel(ch);
+      restartPreviewCycle();
+    }
   });
 
   // ---- Device view ----------------------------------------------------------
