@@ -197,10 +197,16 @@ copy this folder's `data/devices.json` and `data/signals.json` there.
 
 ## Music
 
-The classic guide's background music is royalty-free smooth jazz by Kevin
-MacLeod (incompetech.com), CC BY 4.0 — see [ATTRIBUTION.md](ATTRIBUTION.md).
-The app shuffles every audio file it finds in `static/music/`, so add or swap
-`.mp3`/`.ogg`/`.m4a` tracks freely. If the folder is empty it falls back to a
+The classic guide's background music is royalty-free smooth jazz:
+
+> Music by **Kevin MacLeod** ([incompetech.com](https://incompetech.com)),
+> licensed under [Creative Commons: By Attribution 4.0](https://creativecommons.org/licenses/by/4.0/).
+
+The full track list is in [ATTRIBUTION.md](ATTRIBUTION.md), the currently
+playing track is credited on-screen in the classic guide, and the About panel
+carries the credit as well. The app shuffles every audio file it finds in
+`static/music/`, so add or swap `.mp3`/`.ogg`/`.m4a` tracks freely (keep the
+attribution if you keep the tracks). If the folder is empty it falls back to a
 built-in synthesized jazz loop.
 
 ## Notes

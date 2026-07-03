@@ -683,6 +683,22 @@ video { flex: 1; width: 100%; min-height: 0; background: #000; }
 }
 #classicExit:hover { background: rgba(40, 40, 140, 0.8); }
 
+#classicCredit {
+  position: absolute;
+  bottom: 8px;
+  right: 14px;
+  z-index: 8;
+  pointer-events: none;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: rgba(255, 215, 0, 0.75);
+  text-shadow: 1px 1px 0 #000040;
+  background: rgba(0, 0, 40, 0.55);
+  padding: 3px 10px;
+  border-radius: 6px;
+}
+
 /* -- CRT mode: weather.com/retro-style — fine interlace lines, rolling hum
    bar, RGB fringing, bloom, curvature vignette, whisper of grain -- */
 

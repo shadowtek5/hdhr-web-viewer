@@ -21,7 +21,7 @@
     classicVideo: $("classicVideo"), classicPreviewPh: $("classicPreviewPh"),
     ciChannel: $("ciChannel"), ciTitle: $("ciTitle"), ciTime: $("ciTime"), ciNext: $("ciNext"),
     ciWatchBtn: $("ciWatchBtn"), classicMusicBtn: $("classicMusicBtn"),
-    crtBtn: $("crtBtn"), crtNoise: $("crtNoise"),
+    crtBtn: $("crtBtn"), crtNoise: $("crtNoise"), classicCredit: $("classicCredit"),
     clSlots: [$("clSlot0"), $("clSlot1"), $("clSlot2")],
     playerWrap: $("playerWrap"), playerIdle: $("playerIdle"),
     playerLoading: $("playerLoading"), loadingText: $("loadingText"),
@@ -232,6 +232,8 @@
       "Version": "v" + escapeHtml(v.version),
       "Updates": status,
       "Image": '<a href="https://hub.docker.com/r/' + escapeHtml(v.repo) + '" target="_blank" rel="noopener">' + escapeHtml(v.repo) + "</a>",
+      "Music": 'Kevin MacLeod (<a href="https://incompetech.com" target="_blank" rel="noopener">incompetech.com</a>) — ' +
+        '<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>',
     });
   }
 
@@ -591,7 +593,7 @@
     if (previewCh) classicPreviewChannel(previewCh);
     else classicUpdateInfo(null);
     restartPreviewCycle();
-    if (localStorage.getItem("hdhr_muzak") !== "off") muzakStart();
+    if (localStorage.getItem("hdhr_muzak") !== "off") muzakStart().then(updateMusicBtn);
     updateMusicBtn();
     setCrt(localStorage.getItem("hdhr_crt") === "on" || /[?&]crt=1/.test(location.search));
   }
@@ -788,16 +790,14 @@
       if (!muzak.audio) {
         muzak.audio = new Audio();
         muzak.audio.volume = 0.85;
-        muzak.audio.addEventListener("ended", () => {
+        const advance = () => {
           muzak.idx = (muzak.idx + 1) % muzak.tracks.length;
           muzak.audio.src = muzak.tracks[muzak.idx];
           muzak.audio.play().catch(() => {});
-        });
-        muzak.audio.addEventListener("error", () => { // bad file: skip along
-          muzak.idx = (muzak.idx + 1) % muzak.tracks.length;
-          muzak.audio.src = muzak.tracks[muzak.idx];
-          muzak.audio.play().catch(() => {});
-        });
+          updateMusicCredit();
+        };
+        muzak.audio.addEventListener("ended", advance);
+        muzak.audio.addEventListener("error", advance); // bad file: skip along
         muzak.audio.src = muzak.tracks[muzak.idx];
       }
       try { await muzak.audio.play(); muzak.mode = "file"; return true; }
@@ -892,8 +892,30 @@
     muzak.bar = 0;
   }
 
+  function muzakTrackName() {
+    const url = muzak.tracks && muzak.tracks[muzak.idx];
+    if (!url) return "";
+    const base = decodeURIComponent(url.split("/").pop() || "");
+    return base.replace(/\.[a-z0-9]+$/i, "").replace(/_/g, " ");
+  }
+
+  function updateMusicCredit() {
+    // CC BY 4.0: credit the artist where the music actually plays
+    if (muzak.mode === "file") {
+      els.classicCredit.textContent =
+        "♫ “" + muzakTrackName() + "” — Kevin MacLeod (incompetech.com) · CC BY 4.0";
+      els.classicCredit.classList.remove("hidden");
+    } else if (muzak.mode === "synth") {
+      els.classicCredit.textContent = "♫ synthesized jazz loop";
+      els.classicCredit.classList.remove("hidden");
+    } else {
+      els.classicCredit.classList.add("hidden");
+    }
+  }
+
   function updateMusicBtn() {
     els.classicMusicBtn.textContent = muzak.mode ? "♫ MUSIC ON" : "♫ MUSIC OFF";
+    updateMusicCredit();
   }
 
   els.classicMusicBtn.addEventListener("click", async () => {

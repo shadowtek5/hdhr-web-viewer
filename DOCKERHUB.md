@@ -30,6 +30,12 @@ Open `http://<host-ip>:8090`.
 - `/data` stores saved devices and signal-survey results.
 - `HDHR_PORT` changes the listening port (default 8090).
 
+## Credits
+
+Background music in the classic guide: Kevin MacLeod
+([incompetech.com](https://incompetech.com)), licensed under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+
 ## Requirements
 
 - An HDHomeRun tuner (CONNECT, FLEX, etc.) on your network
